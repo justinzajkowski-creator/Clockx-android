@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-feature android:name="android.software.live_wallpaper" android:required="false" />
+    <application android:theme="@style/ClockTheme" android:label="ClockX Dual Time" android:icon="@drawable/ic_launcher" android:allowBackup="false" android:supportsRtl="true">
+        <activity android:name=".MainActivity" android:exported="true" android:screenOrientation="unspecified">
+            <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
+        </activity>
+        <service android:name=".ClockWallpaperService" android:label="ClockX Live Clock" android:permission="android.permission.BIND_WALLPAPER" android:exported="true">
+            <intent-filter><action android:name="android.service.wallpaper.WallpaperService"/></intent-filter>
+            <meta-data android:name="android.service.wallpaper" android:resource="@xml/live_wallpaper"/>
+        </service>
+        <receiver android:name=".ClockWidgetProvider" android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE"/>
+                <action android:name="android.intent.action.TIME_SET"/>
+                <action android:name="android.intent.action.TIMEZONE_CHANGED"/>
+                <action android:name="android.intent.action.DATE_CHANGED"/>
+                <action android:name="android.intent.action.BOOT_COMPLETED"/>
+                <action android:name="com.clockx.dualtime.REFRESH"/>
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/clock_widget"/>
+        </receiver>
+    </application>
+</manifest>
