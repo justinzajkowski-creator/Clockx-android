@@ -15,10 +15,10 @@ import java.time.ZonedDateTime;
 import java.util.HashMap;
 import java.util.Map;
 
-/** Uses the two explicitly approved artwork images and independently movable layers. */
+/** Clean stationary artwork with a mathematically drawn calendar and separate moving hands. */
 public final class ClockRenderer {
-    private static final float DIM=1254f, CX=621f,CY=614f;
-    private static final float AMX=273f, AMY=601f, DX=621f, DY=924f;
+    private static final float DIM=1254f, CX=627f,CY=622f;
+    private static final float AMX=246f, AMY=602f, DX=627f, DY=928f;
     private final Context context;
     private final Map<Integer,Bitmap> cache=new HashMap<>();
     private Bitmap cachedPhoto;private int photoRevision=-1;
@@ -28,32 +28,99 @@ public final class ClockRenderer {
     public ClockRenderer(Context c){context=c.getApplicationContext();}
     private Bitmap img(int id){Bitmap b=cache.get(id);if(b==null){BitmapFactory.Options opt=new BitmapFactory.Options();opt.inPreferredConfig=Bitmap.Config.ARGB_8888;b=BitmapFactory.decodeResource(context.getResources(),id,opt);if(b!=null)cache.put(id,b);}return b;}
     private void layer(Canvas c,int id){Bitmap b=img(id);if(b!=null)c.drawBitmap(b,0,0,imagePaint);}
-    private void rotated(Canvas c,int id,float delta,float px,float py){c.save();c.rotate(delta,px,py);layer(c,id);c.restore();}
-    private static float angle(float x,float y,float cx,float cy){return (float)Math.toDegrees(Math.atan2(x-cx,cy-y));}
-    private static float baseHour=angle(350,400,CX,CY),baseMinute=angle(1035,345,CX,CY),baseGMT=angle(786,871,CX,CY),baseSecond=angle(1025,975,CX,CY),baseDate=angle(437,1027,DX,DY);
     public void drawDial(Canvas c,float left,float top,float width,Instant now,boolean showSeconds){
         ZonedDateTime local=ClockSettings.localTime(context,now),home=ClockSettings.homeTime(context,now);
         boolean night=ClockSettings.dayOrNight(context,local);
         int[] art=night?NIGHT:DAY;
         c.save();c.translate(left,top);c.scale(width/DIM,width/DIM);
         layer(c,art[0]);
-        // 31 evenly spaced calendar positions; 31 is at twelve o'clock.
-        float dateTarget=local.getDayOfMonth()*360f/31f;
-        rotated(c,art[1],dateTarget-baseDate,DX,DY);
-        // Original approved reference has a fan indicator at left. AM points up, PM down.
-        rotated(c,art[2],local.getHour()<12?-55f:0f,AMX,AMY);
+        drawCalendar(c,local.getDayOfMonth());
+        drawAmPm(c,local.getHour()<12);
+        pivot(c,DX,DY,19f);pivotOrange(c,AMX,AMY,12f);
         // Orange GMT hand completes one revolution in 24 hours, per the reference's app behavior.
         float home24=(home.getHour()+home.getMinute()/60f+home.getSecond()/3600f)*15f;
-        rotated(c,art[3],home24-baseGMT,CX,CY);
+        drawGmtHand(c,home24);
         float localH=((local.getHour()%12)+local.getMinute()/60f+local.getSecond()/3600f)*30f;
         float localM=(local.getMinute()+(local.getSecond()+local.getNano()/1e9f)/60f)*6f;
         float localS=(local.getSecond()+local.getNano()/1e9f)*6f;
-        rotated(c,art[4],localH-baseHour,CX,CY);
-        rotated(c,art[5],localM-baseMinute,CX,CY);
-        if(showSeconds)rotated(c,art[6],localS-baseSecond,CX,CY);
-        pivot(c,CX,CY,29f);pivot(c,DX,DY,19f);pivotOrange(c,AMX,AMY,18f);
+        drawSilverHand(c,localH,335f,24f,night);
+        drawSilverHand(c,localM,475f,17f,night);
+        if(showSeconds)drawSecondsHand(c,localS);
+        pivot(c,CX,CY,43f);
         c.restore();
     }
+
+
+    private static Path handShape(float length,float halfWidth){
+        Path h=new Path();h.moveTo(-halfWidth*.65f,35f);
+        h.lineTo(-halfWidth,-length*.23f);h.lineTo(-halfWidth*.56f,-length+38f);
+        h.lineTo(0,-length);h.lineTo(halfWidth*.56f,-length+38f);
+        h.lineTo(halfWidth,-length*.23f);h.lineTo(halfWidth*.65f,35f);h.close();return h;
+    }
+    private static void drawSilverHand(Canvas c,float angle,float length,float halfWidth,boolean night){
+        c.save();c.translate(CX,CY);c.rotate(angle);
+        Paint p=new Paint(Paint.ANTI_ALIAS_FLAG);
+        Path body=handShape(length,halfWidth);
+        c.save();c.translate(3,4);p.setColor(0x99030b16);c.drawPath(body,p);c.restore();
+        p.setShader(new LinearGradient(-halfWidth,0,halfWidth,0,
+            new int[]{0xff374c5a,0xffc5d2dd,0xffffffff,0xff8297a9,0xff344c60},null,Shader.TileMode.CLAMP));
+        c.drawPath(body,p);p.setShader(null);
+        Path inset=new Path();inset.moveTo(-halfWidth*.48f,-55);
+        inset.lineTo(-halfWidth*.28f,-length+51);inset.lineTo(0,-length+27);
+        inset.lineTo(halfWidth*.28f,-length+51);inset.lineTo(halfWidth*.48f,-55);inset.close();
+        p.setColor(night?0xff91ffd0:0xffe9f0ed);c.drawPath(inset,p);
+        p.setColor(0xfff7fbff);p.setStrokeWidth(1.6f);c.drawLine(0,25,0,-47,p);
+        c.restore();
+    }
+    private static void drawGmtHand(Canvas c,float angle){
+        c.save();c.translate(CX,CY);c.rotate(angle);
+        Paint p=new Paint(Paint.ANTI_ALIAS_FLAG);p.setStrokeWidth(9);
+        p.setColor(0xffd75b0e);c.drawLine(0,32,0,-330,p);
+        p.setStrokeWidth(3);p.setColor(0xffffb04c);c.drawLine(-1,30,-1,-330,p);
+        Path arrow=new Path();arrow.moveTo(0,-380);arrow.lineTo(-25,-324);arrow.lineTo(25,-324);arrow.close();
+        p.setColor(0xffff861d);c.drawPath(arrow,p);
+        Path inset=new Path();inset.moveTo(0,-364);inset.lineTo(-14,-332);inset.lineTo(14,-332);inset.close();
+        p.setColor(0xfff7f7ed);c.drawPath(inset,p);c.restore();
+    }
+    private static void drawSecondsHand(Canvas c,float angle){
+        c.save();c.translate(CX,CY);c.rotate(angle);
+        Paint p=new Paint(Paint.ANTI_ALIAS_FLAG);p.setColor(0xfff4f8fc);p.setStrokeWidth(3f);
+        c.drawLine(0,90,0,-510,p);p.setStrokeWidth(7f);c.drawLine(0,60,0,96,p);c.restore();
+    }
+    // Draw every date position explicitly: no generated or retouched numerals.
+    private static void drawCalendar(Canvas c,int day){
+        Paint p=new Paint(Paint.ANTI_ALIAS_FLAG);
+        c.save();c.translate(DX,DY);
+        p.setColor(0xff050d18);c.drawCircle(0,0,227,p);
+        p.setShader(new LinearGradient(-220,-220,220,220,new int[]{0xff244469,0xff102238,0xff244469},null,Shader.TileMode.CLAMP));
+        c.drawCircle(0,0,223,p);p.setShader(null);
+        p.setStyle(Paint.Style.STROKE);p.setStrokeWidth(1f);p.setColor(0xff2b4b6d);
+        for(int radius=28;radius<220;radius+=4)c.drawCircle(0,0,radius,p);
+        p.setStyle(Paint.Style.FILL);
+        p.setTextAlign(Paint.Align.CENTER);p.setTextSize(30f);
+        p.setTypeface(android.graphics.Typeface.create("sans-serif-condensed",android.graphics.Typeface.NORMAL));
+        for(int date=1;date<=31;date++){
+            c.save();c.rotate(date*360f/31f);
+            p.setColor(0xffeff5ff);
+            if((date&1)==1)c.drawText(Integer.toString(date),0,-177,p);
+            else {p.setStrokeWidth(3f);c.drawLine(0,-210,0,-187,p);}
+            c.restore();
+        }
+        c.save();c.rotate(day*360f/31f);
+        Path hand=new Path();hand.moveTo(-6,24);hand.lineTo(-5,-141);hand.lineTo(0,-170);hand.lineTo(5,-141);hand.lineTo(6,24);hand.close();
+        p.setColor(0xffe2e9ef);c.drawPath(hand,p);
+        p.setColor(0xff6d8598);p.setStrokeWidth(2f);c.drawLine(0,20,0,-158,p);
+        c.restore();c.restore();
+    }
+    private static void drawAmPm(Canvas c,boolean am){
+        Paint p=new Paint(Paint.ANTI_ALIAS_FLAG);
+        c.save();c.translate(AMX,AMY);c.rotate(am?-23f:23f);
+        p.setColor(0xffff841c);p.setStrokeWidth(9f);c.drawLine(0,0,174,0,p);
+        Path tip=new Path();tip.moveTo(190,0);tip.lineTo(163,-13);tip.lineTo(163,13);tip.close();
+        p.setColor(0xfff5f8fa);c.drawPath(tip,p);
+        c.restore();
+    }
+
     private static void pivot(Canvas c,float x,float y,float r){
         Paint p=new Paint(Paint.ANTI_ALIAS_FLAG);
         p.setColor(0xff1a2b40);c.drawCircle(x+2,y+3,r+6,p);
@@ -88,3 +155,4 @@ public final class ClockRenderer {
     public void invalidatePhoto(){if(cachedPhoto!=null&&!cachedPhoto.isRecycled())cachedPhoto.recycle();cachedPhoto=null;}
     public void release(){invalidatePhoto();for(Bitmap b:cache.values())if(!b.isRecycled())b.recycle();cache.clear();}
 }
+
